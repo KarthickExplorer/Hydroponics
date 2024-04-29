@@ -1,0 +1,117 @@
+#include <DHT.h>
+
+#define DHTPIN D4        // Digital pin connected to the DHT sensor
+#define DHTTYPE DHT11     // Type of the DHT sensor
+
+#define S0 D0                             /* Assign Multiplexer pin S0 connect to pin D0 of NodeMCU */
+    #define S1 D1                             /* Assign Multiplexer pin S1 connect to pin D1 of NodeMCU */
+    #define S2 D2                             /* Assign Multiplexer pin S2 connect to pin D2 of NodeMCU */
+    #define S3 D3                             /* Assign Multiplexer pin S3 connect to pin D3 of NodeMCU */
+    #define SIG A0 
+
+DHT dht(DHTPIN, DHTTYPE);
+
+String Soil_Stage;
+String Ph_State;
+
+float default_value = 10.18;
+unsigned long int avgValue;
+float b;
+int buf[10], 
+temp;
+
+                         
+int decimal = 2;                          // Decimal places of the sensor value outputs 
+    float  Soil_Moisture_01;                            /* Assign the name "sensor0" as analog output value from Channel C0 */
+    float  Ph_Sensor_02;                            /* Assign the name "sensor1" as analog output value from Channel C1 */
+
+void setup() {
+
+Serial.begin(9600);
+dht.begin();
+    pinMode(S0,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin SO */        
+    pinMode(S1,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin S1 */  
+    pinMode(S2,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin S2 */ 
+    pinMode(S3,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin S3 */  
+    pinMode(SIG, INPUT);
+
+}
+
+void loop() {
+
+float humidity = dht.readHumidity();
+float temperature = dht.readTemperature();
+
+  Serial.print("Humidity: ");
+  Serial.print(humidity);
+  Serial.println("%");
+  Serial.print("Temperature:");
+  Serial.print(temperature);
+  Serial.println("°C");
+
+//Read SoilMoisture and Print the soil condition
+
+float SoilMoisture = analogRead(SIG);
+
+  if(SoilMoisture > 500) {
+    Soil_Stage = "Dry , Water Need";
+   // digitalWrite(relay_pin, HIGH); // Turn motor on
+  }
+  else if(SoilMoisture >= 400 && SoilMoisture <= 500) {
+    Soil_Stage = "There is some moisture, Soil is medium";
+     // digitalWrite(relay_pin, LOW); // Turn motor off
+  }
+  else if(SoilMoisture < 400) {
+    Soil_Stage = "Soil is wet";
+    /// digitalWrite(relay_pin, LOW); // Turn motor off
+  }
+
+digitalWrite(S0,LOW); digitalWrite(S1,LOW); digitalWrite(S2,LOW); digitalWrite(S3,LOW);
+  Soil_Moisture_01 = analogRead(SIG);
+
+  Serial.print("Soil Moisture: ");
+  Serial.println(SoilMoisture); // Print the moisture value
+  Serial.println(Soil_Stage);
+
+// Read Ph_Value and Print the State of Water 
+
+for (int i = 0; i < 10; i++) {
+ buf[i] = analogRead(SIG);
+ delay(10); 
+}
+ for (int i = 0; i < 9; i++)
+ {
+ for (int j = i + 1; j < 10; j++)
+ {
+ if (buf[i] > buf[j])
+ {
+ temp = buf[i];
+ buf[i] = buf[j];
+ buf[j] = temp;
+}
+ }
+ avgValue = 0;
+ for (int i = 2; i < 8; i++)
+avgValue += buf[i];
+ float pHVol = (float)avgValue * 5.0 / 1024 / 6;
+ float phValue = -5.70 * pHVol + 21.34;
+ float Ph_Value = phValue + default_value;
+
+if (Ph_Value <= 6.4) {  //phValue   Final_value
+    Ph_State = "Acidic";
+  } else if (Ph_Value >= 6.5 && Ph_Value <= 7.5) {
+    Ph_State = "Neutral";
+  } else {
+    Ph_State = "Alkaline";
+  }
+ // Channel 1 (C1 pin - binary output 1,0,0,0)
+  digitalWrite(S0,HIGH); digitalWrite(S1,LOW); digitalWrite(S2,LOW); digitalWrite(S3,LOW);
+   Ph_Sensor_02 = analogRead(SIG);
+  Serial.print("Ph_Value : ");
+  Serial.println(Ph_Value); 
+  Serial.print("Ph_State :");
+  Serial.println(Ph_State);
+
+  delay(10000); // Delay for readability
+}
+}
