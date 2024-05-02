@@ -17,6 +17,9 @@ DHT dht(DHTPIN, DHTTYPE);
 float Temperature;
 float Humidity;
 
+String Ph_Sensor_Stages;
+String Soil_Stages;
+
 float calibration_value = 21.34 + 0.7;
 float default_value = 10.17;
 String stage;
@@ -79,6 +82,16 @@ void loop() {                                 /* Put your codes here to run over
   
     
     Serial.print("Ph_Sensor: ");  Serial.print(Ph_Sensor); Serial.print("  ");  Serial.println(phValue);        /* state value for sensor 0 */
+
+    if (Ph_Sensor <= 6.4) {
+    Ph_Sensor_Stages = "Acidic";
+  } else if (Ph_Sensor >= 6.5 && Ph_Sensor <= 7.5) {
+    Ph_Sensor_Stages = "Neutral";
+  } else {
+    Ph_Sensor_Stages = "Alkaline";
+  }
+
+  Serial.print("Ph_Sensor_Stages : "); Serial.println(Ph_Sensor_Stages);
     
      // Channel 1 (C1 pin - binary output 1,0,0,0)
     digitalWrite(S0,HIGH); digitalWrite(S1,LOW); digitalWrite(S2,LOW); digitalWrite(S3,LOW);
@@ -86,6 +99,15 @@ void loop() {                                 /* Put your codes here to run over
 
     Serial.print("SoilMoisture: "); Serial.println(SoilMoisture);
 
+    if (SoilMoisture > 750) {
+     // digitalWrite(relay_pin, LOW);
+    Soil_Stages = "Soil is Dry! Water needed!";
+  } else {
+     // digitalWrite(relay_pin, HIGH);
+    Soil_Stages = "Soil is Moist! Water not needed!";
+  } 
+
+  Serial.print("Soil_Stages : "); Serial.println(Soil_Stages);
 
 
     delay(20000);                                                  // Read the value every second
