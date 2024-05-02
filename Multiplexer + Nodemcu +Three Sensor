@@ -1,0 +1,92 @@
+/*/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/////////////*/
+
+/* 0- General */
+#include <DHT.h>
+
+#define DHTPIN D5       // Digital pin connected to the DHT sensor
+#define DHTTYPE DHT11     // Type of the DHT sensor
+
+DHT dht(DHTPIN, DHTTYPE);
+
+#define S0 D0                             /* Assign Multiplexer pin S0 connect to pin D0 of NodeMCU */
+#define S1 D1                             /* Assign Multiplexer pin S1 connect to pin D1 of NodeMCU */
+#define S2 D2                             /* Assign Multiplexer pin S2 connect to pin D2 of NodeMCU */
+#define S3 D3                             /* Assign Multiplexer pin S3 connect to pin D3 of NodeMCU */
+#define SIG A0                            /* Assign SIG pin as Analog output for all 16 channels of Multiplexer to pin A0 of NodeMCU */
+
+float Temperature;
+float Humidity;
+
+float calibration_value = 21.34 + 0.7;
+float default_value = 10.17;
+String stage;
+unsigned long int avgValue;  // Store the average value of the sensor feedback
+int buf[10], temp;
+
+
+int decimal = 2;                          // Decimal places of the sensor value outputs 
+int Ph_Sensor;                            /* Assign the name "sensor0" as analog output value from Channel C0 */
+int SoilMoisture;  
+
+void setup() {                                /* Put your codes here to run only once during micro controller startup */
+
+    /* 0- General */
+    dht.begin();
+    pinMode(S0,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin SO */        
+    pinMode(S1,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin S1 */  
+    pinMode(S2,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin S2 */ 
+    pinMode(S3,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin S3 */  
+    pinMode(SIG, INPUT);                      /* Define analog signal pin as input or receiver from the Multiplexer pin SIG */  
+    
+    Serial.begin(9600);                       /* to display readings in Serial Monitor at 9600 baud rates */
+}
+
+void loop() {                                 /* Put your codes here to run over and over again endlessly */
+
+  float Humidity = dht.readHumidity();
+  float Temperature = dht.readTemperature();
+    Serial.print("Humidity: ");
+    Serial.print(Humidity);
+    Serial.println(" %\t");
+    Serial.print("Temperature: ");
+    Serial.print(Temperature);
+    Serial.println(" *C");
+
+    /* 0- General */
+
+    // Channel 0 (C0 pin - binary output 0,0,0,0)
+    digitalWrite(S0,LOW); digitalWrite(S1,LOW); digitalWrite(S2,LOW); digitalWrite(S3,LOW);
+
+      for (int i = 0; i < 10; i++) { // Get 10 sample values from the sensor for smoothing the value
+    buf[i] = analogRead(SIG);
+    delay(10);
+  }
+  for (int i = 0; i < 9; i++) { // Sort the analog from small to large
+    for (int j = i + 1; j < 10; j++) {
+      if (buf[i] > buf[j]) {
+        temp = buf[i];
+        buf[i] = buf[j];
+        buf[j] = temp;
+      }
+    }
+  }
+  avgValue = 0;
+  for (int i = 2; i < 8; i++) avgValue += buf[i];  // Take the average value of 6 center samples
+
+  float phValue = (float)avgValue * 5.0 / 1024 / 6; // Convert the analog into millivolts
+  phValue = -5.70 * phValue + calibration_value; // Convert the millivolts into pH value
+  float Ph_Sensor =phValue+default_value;
+  
+    
+    Serial.print("Ph_Sensor: ");  Serial.print(Ph_Sensor); Serial.print("  ");  Serial.println(phValue);        /* state value for sensor 0 */
+    
+     // Channel 1 (C1 pin - binary output 1,0,0,0)
+    digitalWrite(S0,HIGH); digitalWrite(S1,LOW); digitalWrite(S2,LOW); digitalWrite(S3,LOW);
+    SoilMoisture = analogRead(SIG);
+
+    Serial.print("SoilMoisture: "); Serial.println(SoilMoisture);
+
+
+
+    delay(20000);                                                  // Read the value every second
+}
