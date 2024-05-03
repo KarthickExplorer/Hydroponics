@@ -1,10 +1,17 @@
-/*/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/////////////*/
+// Dth_Multiplexer
 
-/* 0- General */
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
+
 #include <DHT.h>
-
 #define DHTPIN D5       // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT11     // Type of the DHT sensor
+
+/*// Wifi Connection details
+
+const char* ssid = "Karthick";
+const char* password = "Karthick@2001";
+const char* host = "192.168.1.51";*/
 
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -17,7 +24,7 @@ DHT dht(DHTPIN, DHTTYPE);
 float Temperature;
 float Humidity;
 
-String Ph_Sensor_Stages;
+String Ph_State;
 String Soil_Stages;
 
 float calibration_value = 21.34 + 0.7;
@@ -34,30 +41,47 @@ int SoilMoisture;
 void setup() {                                /* Put your codes here to run only once during micro controller startup */
 
     /* 0- General */
+    
+ Serial.begin(9600); 
+
+
     dht.begin();
     pinMode(S0,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin SO */        
     pinMode(S1,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin S1 */  
     pinMode(S2,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin S2 */ 
     pinMode(S3,OUTPUT);                       /* Define digital signal pin as output to the Multiplexer pin S3 */  
     pinMode(SIG, INPUT);                      /* Define analog signal pin as input or receiver from the Multiplexer pin SIG */  
-    
-    Serial.begin(9600);                       /* to display readings in Serial Monitor at 9600 baud rates */
+   
+/*// Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println(".");
+  }
+
+  // Print ESP8266 Local IP Address
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());*/
+
 }
 
 void loop() {                                 /* Put your codes here to run over and over again endlessly */
 
   float Humidity = dht.readHumidity();
   float Temperature = dht.readTemperature();
-    Serial.print("Humidity: ");
+   /* Serial.print("Humidity: ");
     Serial.print(Humidity);
     Serial.println(" %\t");
     Serial.print("Temperature: ");
     Serial.print(Temperature);
-    Serial.println(" *C");
+    Serial.println(" *C");*/
 
-    /* 0- General */
+  //   /* 0- General */
 
-    // Channel 0 (C0 pin - binary output 0,0,0,0)
+    // Channel 0 (C0 pin - binary output 0,0,0,0)  --> Ph Sensor Reading through Multiplexer.
+
     digitalWrite(S0,LOW); digitalWrite(S1,LOW); digitalWrite(S2,LOW); digitalWrite(S3,LOW);
 
       for (int i = 0; i < 10; i++) { // Get 10 sample values from the sensor for smoothing the value
@@ -80,24 +104,20 @@ void loop() {                                 /* Put your codes here to run over
   phValue = -5.70 * phValue + calibration_value; // Convert the millivolts into pH value
   float Ph_Sensor =phValue+default_value;
   
-    
-    Serial.print("Ph_Sensor: ");  Serial.print(Ph_Sensor); Serial.print("  ");  Serial.println(phValue);        /* state value for sensor 0 */
-
     if (Ph_Sensor <= 6.4) {
-    Ph_Sensor_Stages = "Acidic";
+    Ph_State = "Acidic";
   } else if (Ph_Sensor >= 6.5 && Ph_Sensor <= 7.5) {
-    Ph_Sensor_Stages = "Neutral";
+    Ph_State = "Neutral";
   } else {
-    Ph_Sensor_Stages = "Alkaline";
+    Ph_State = "Alkaline";
   }
 
-  Serial.print("Ph_Sensor_Stages : "); Serial.println(Ph_Sensor_Stages);
-    
-     // Channel 1 (C1 pin - binary output 1,0,0,0)
+ // Channel 1 (C1 pin - binary output 1,0,0,0)  ----> Read the Soil Moisture Sensor through Multiplexer.
+
     digitalWrite(S0,HIGH); digitalWrite(S1,LOW); digitalWrite(S2,LOW); digitalWrite(S3,LOW);
     SoilMoisture = analogRead(SIG);
 
-    Serial.print("SoilMoisture: "); Serial.println(SoilMoisture);
+   
 
     if (SoilMoisture > 750) {
      // digitalWrite(relay_pin, LOW);
@@ -106,8 +126,32 @@ void loop() {                                 /* Put your codes here to run over
      // digitalWrite(relay_pin, HIGH);
     Soil_Stages = "Soil is Moist! Water not needed!";
   } 
+  
 
-  Serial.print("Soil_Stages : "); Serial.println(Soil_Stages);
+    // Print Humidity and Temperature values in the Serial Monitor 
+
+    Serial.print("Humidity: ");
+    Serial.print(Humidity);
+    Serial.println(" %\t");
+    Serial.print("Temperature: ");
+    Serial.print(Temperature);
+    Serial.println(" *C");
+
+   // Print Ph Sensor values and Ph_State in the Serial Monitor
+ 
+    Serial.print("Ph_Sensor: "); 
+    Serial.print(Ph_Sensor); 
+    Serial.print("  "); 
+    Serial.println(phValue);        /* state value for sensor 0 */
+    Serial.print("Ph_State : "); 
+    Serial.println(Ph_State);
+ 
+  // Print Soil Moisture and Soil Moisture State in the Serial Monitor.  
+
+   Serial.print("SoilMoisture: ");
+   Serial.println(SoilMoisture);
+   Serial.print("Soil_Stages : "); 
+   Serial.println(Soil_Stages);
 
 
     delay(20000);                                                  // Read the value every second
