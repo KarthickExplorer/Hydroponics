@@ -2,66 +2,108 @@
 #include <ESP8266WiFi.h>
 #include <DHT.h>
 
+#define VREF 5.5              // Analog reference voltage (Volt) of the ADC
+#define SCOUNT  30            // Sum of sample points
+
 #define DHTPIN D5       // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT11   // Type of the DHT sensor
 
-// Wifi Connection details
-const char* ssid = "Karthick";
+#define S0 D0   
+#define S1 D1   
+#define S2 D2   
+#define S3 D3   
+#define SIG A0  
+
+// WiFi Connection details
+const char* ssid = "KarthicK";
 const char* password = "Karthick@2001";
-const char* host = "192.168.1.51";
+const char* host = "192.168.1.48";
 
 DHT dht(DHTPIN, DHTTYPE);
 
-#define S0 D0   /* Assign Multiplexer pin S0 connect to pin D0 of NodeMCU */
-#define S1 D1   /* Assign Multiplexer pin S1 connect to pin D1 of NodeMCU */
-#define S2 D2   /* Assign Multiplexer pin S2 connect to pin D2 of NodeMCU */
-#define S3 D3   /* Assign Multiplexer pin S3 connect to pin D3 of NodeMCU */
-#define SIG A0  /* Assign SIG pin as Analog output for all 16 channels of Multiplexer to pin A0 of NodeMCU */
+float temperature;
+float humidity;
+float ph_level;
+float tds_level;
+// float ec_level;
 
-float Temperature;
-float Humidity;
 String Ph_State;
-String Soil_Stages;
+
 float calibration_value = 21.34 + 0.7;
 float default_value = 10.17;
-unsigned long int avgValue;  // Store the average value of the sensor feedback
+unsigned long int avgValue;
 int buf[10], temp;
-float Ph_Sensor;
-float SoilMoisture;  
+
+int analogBuffer[SCOUNT];     // Store the analog value in the array, read from ADC
+int analogBufferTemp[SCOUNT];
+int analogBufferIndex = 0;
+
+float averageVoltage = 0;
+float tdsValue = 0;
+
+// Median filtering algorithm
+int getMedianNum(int bArray[], int iFilterLen) {
+  int bTab[iFilterLen];
+  for (byte i = 0; i < iFilterLen; i++)
+    bTab[i] = bArray[i];
+  int i, j, bTemp;
+  for (j = 0; j < iFilterLen - 1; j++) {
+    for (i = 0; i < iFilterLen - j - 1; i++) {
+      if (bTab[i] > bTab[i + 1]) {
+        bTemp = bTab[i];
+        bTab[i] = bTab[i + 1];
+        bTab[i + 1] = bTemp;
+      }
+    }
+  }
+  if ((iFilterLen & 1) > 0)
+    return bTab[(iFilterLen - 1) / 2];
+  else
+    return (bTab[iFilterLen / 2] + bTab[iFilterLen / 2 - 1]) / 2;
+}
 
 void setup() {
-  Serial.begin(115200); 
+  Serial.begin(115200);
   dht.begin();
-  pinMode(S0,OUTPUT);   /* Define digital signal pin as output to the Multiplexer pin S0 */        
-  pinMode(S1,OUTPUT);   /* Define digital signal pin as output to the Multiplexer pin S1 */  
-  pinMode(S2,OUTPUT);   /* Define digital signal pin as output to the Multiplexer pin S2 */ 
-  pinMode(S3,OUTPUT);   /* Define digital signal pin as output to the Multiplexer pin S3 */  
-  pinMode(SIG, INPUT);  /* Define analog signal pin as input or receiver from the Multiplexer pin SIG */  
+  pinMode(S0, OUTPUT);
+  pinMode(S1, OUTPUT);
+  pinMode(S2, OUTPUT);
+  pinMode(S3, OUTPUT);
+  pinMode(SIG, INPUT);
 
-  // Connect to Wi-Fi
+   // Connect to Wi-Fi
   WiFi.begin(ssid, password);
-  Serial.println("Connecting to WiFi");
+  Serial.println("Connecting to WiFi...");
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.print(".");
   }
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
+  Serial.println("\n---------------------------------");
+  Serial.println("🚀 WiFi Connected Successfully!");
+  Serial.print("📶 Connected to: ");
+  Serial.println(ssid);
+  Serial.print("🌍 IP Address: ");
   Serial.println(WiFi.localIP());
+  Serial.println("---------------------------------");
 }
 
 void loop() {
-  float Humidity = dht.readHumidity();
-  float Temperature = dht.readTemperature();
+  // Read DHT sensor
+  humidity = dht.readHumidity();
+  temperature = dht.readTemperature();
 
-  // Channel 0 (C0 pin - binary output 0,0,0,0) --> Ph Sensor Reading through Multiplexer.
-  digitalWrite(S0,LOW); digitalWrite(S1,LOW); digitalWrite(S2,LOW); digitalWrite(S3,LOW);
-  for (int i = 0; i < 10; i++) { // Get 10 sample values from the sensor for smoothing the value
+  // Read pH sensor using multiplexer
+  digitalWrite(S0, LOW);
+  digitalWrite(S1, LOW);
+  digitalWrite(S2, LOW);
+  digitalWrite(S3, LOW);
+
+  for (int i = 0; i < 10; i++) {
     buf[i] = analogRead(SIG);
     delay(10);
   }
-  for (int i = 0; i < 9; i++) { // Sort the analog from small to large
+
+  for (int i = 0; i < 9; i++) {
     for (int j = i + 1; j < 10; j++) {
       if (buf[i] > buf[j]) {
         temp = buf[i];
@@ -70,71 +112,94 @@ void loop() {
       }
     }
   }
+
   avgValue = 0;
-  for (int i = 2; i < 8; i++) avgValue += buf[i];  // Take the average value of 6 center samples
-  float phValue = (float)avgValue * 5.0 / 1024 / 6; // Convert the analog into millivolts
-  phValue = -5.70 * phValue + calibration_value;    // Convert the millivolts into pH value
-  Ph_Sensor = phValue + default_value;
-  
-  if (Ph_Sensor <= 6.4) {
+  for (int i = 2; i < 8; i++) avgValue += buf[i];
+  float phValue = (float)avgValue * 5.0 / 1024 / 6;
+  phValue = -5.70 * phValue + calibration_value;
+  ph_level = phValue + default_value;
+
+  if (ph_level <= 6.4) {
     Ph_State = "Acidic";
-  } else if (Ph_Sensor >= 6.5 && Ph_Sensor <= 7.5) {
+  } else if (ph_level >= 6.5 && ph_level <= 7.5) {
     Ph_State = "Neutral";
   } else {
     Ph_State = "Alkaline";
   }
 
-  // Channel 1 (C1 pin - binary output 1,0,0,0) ----> Read the Soil Moisture Sensor through Multiplexer.
-  digitalWrite(S0,HIGH); digitalWrite(S1,LOW); digitalWrite(S2,LOW); digitalWrite(S3,LOW);
-  SoilMoisture = analogRead(SIG);
-  
-  if (SoilMoisture > 750) {
-    Soil_Stages = "Soil is Dry! Water needed!";
-  } else {
-    Soil_Stages = "Soil is Moist! Water not needed!";
-  } 
-  
-  if (isnan(Temperature) || isnan(Humidity) || isnan(SoilMoisture) || isnan(Ph_Sensor)) {
-    Serial.println("Failed to read one of the sensors");
-  } else {
-    Serial.print("Temperature: ");
-    Serial.print(Temperature);
-    Serial.print(" %\t");
-    Serial.print("Humidity: ");
-    Serial.print(Humidity);
-    Serial.print(" *C\t");
-    Serial.print("SoilMoisture: ");
-    Serial.print(SoilMoisture);
-    Serial.print("\t");
-    Serial.print("Ph_Sensor: ");
-    Serial.println(Ph_Sensor);
-    delay(20000);
+  // Read TDS sensor
+  digitalWrite(S0, HIGH); 
+  digitalWrite(S1, LOW); 
+  digitalWrite(S2, LOW); 
+  digitalWrite(S3, LOW);
+  tds_level = analogRead(SIG);
+
+  static unsigned long analogSampleTimepoint = millis();
+  if (millis() - analogSampleTimepoint > 40U) {
+    analogSampleTimepoint = millis();
+    analogBuffer[analogBufferIndex] = analogRead(SIG);
+    analogBufferIndex++;
+    if (analogBufferIndex == SCOUNT) {
+      analogBufferIndex = 0;
+    }
   }
 
+  static unsigned long printTimepoint = millis();
+  if (millis() - printTimepoint > 800U) {
+    printTimepoint = millis();
+    memcpy(analogBufferTemp, analogBuffer, sizeof(analogBuffer));
+
+    averageVoltage = getMedianNum(analogBufferTemp, SCOUNT) * (float)VREF / 1024.0;
+    float compensationCoefficient = 1.0 + 0.02 * (temperature - 25.0);  // Fixed incorrect variable name
+    float compensationVoltage = averageVoltage / compensationCoefficient;
+    tds_level = (133.42 * compensationVoltage * compensationVoltage * compensationVoltage 
+                - 255.86 * compensationVoltage * compensationVoltage 
+                + 857.39 * compensationVoltage) * 0.5;
+
+   if (isnan(temperature) || isnan(humidity) || isnan(ph_level) || isnan(tdsValue)) {
+    Serial.println("Failed to read one of the sensors");
+  } else {
+    Serial.print("temperature: ");
+    Serial.print(temperature);
+    Serial.print(" %\t");
+    Serial.print("humidity: ");
+    Serial.print(humidity);
+    Serial.print(" *C\t");
+    Serial.print("ph_level: ");
+    Serial.print(ph_level);
+    Serial.print("\t");
+    Serial.print("tds_level: ");
+    Serial.println(tds_level);
+    delay(20000);
+  }
   Serial.print("connecting to ");
   Serial.println(host);
-
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
   const int httpPort = 80;
+// const int httpPort = 8080; // Change to the correct port
+
   if (!client.connect(host, httpPort)) {
     Serial.println("connection failed");
     return;
   }
+client.print(String("GET /SampleHP/store_sensor_data.php?") +
+             "temperature=" + String(temperature) +
+             "&humidity=" + String(humidity) +
+             "&ph_level=" + String(ph_level) +
+             "&tds_level=" + String(tds_level) +
+            //  "&ec_level=" + String(ecValue) + // Added EC level
+             " HTTP/1.1\r\n" +
+             "Host: localhost\r\n" +  // Ensure 'localhost' works; otherwise, replace with your server IP
+             "Connection: close\r\n\r\n");
 
-  // This will send the request to the server
-  client.print(String("GET http://localhost/Threesensors/ThreeSensor.php?") +
-               ("&Temperature=") + Temperature + 
-               ("&Humidity=") + Humidity + 
-               ("&SoilMoisture=") + SoilMoisture +
-               ("&Ph_Sensor=") + Ph_Sensor + 
-               " HTTP/1.1\r\n" + 
-               "Host: " + host + "\r\n" + 
-               "Connection: close\r\n\r\n");
 
-  unsigned long timeout = millis();
+
+
+    unsigned long timeout = millis();
   while (client.available() == 0) {
-    if (millis() - timeout > 1000) {
+    // if (millis() - timeout > 1000) {
+    if (millis() - timeout > 5000) { // Wait 5 seconds instead of 1 second
       Serial.println(">>> Client Timeout !");
       client.stop();
       return;
@@ -149,4 +214,4 @@ void loop() {
 
   Serial.println();
   Serial.println("closing connection");
-}
+}}
