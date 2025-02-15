@@ -1,0 +1,27 @@
+<?php
+class sensorData {
+    public $link='';
+
+    function __construct($temperature, $humidity, $tds_level, $ph_level){
+        $this->connect();
+        $this->storeInDB($temperature, $humidity, $tds_level, $ph_level);
+    }
+
+    function connect(){
+        $this->link = mysqli_connect('localhost','root','') or die('Cannot connect to the DB');
+        mysqli_select_db($this->link,'samplehp') or die('Cannot select the DB');
+    }
+
+    function storeInDB($temperature, $humidity, $tds_level, $ph_level){ 
+        $query = "INSERT INTO sensor_data (temperature, humidity, tds_level, ph_level) VALUES ('$temperature', '$humidity', '$tds_level', '$ph_level')";
+        $result = mysqli_query($this->link,$query) or die('Errant query:  '.$query);
+    }
+}
+
+// Check if temperature, humidity, tds_level, and ph_level are provided in the URL
+if(isset($_GET['temperature']) && isset($_GET['humidity']) && isset($_GET['tds_level']) && isset($_GET['ph_level']) && $_GET['temperature'] != '' && $_GET['humidity'] != '' && $_GET['tds_level'] != '' && $_GET['ph_level'] != ''){
+    $sensorData = new sensorData($_GET['temperature'], $_GET['humidity'], $_GET['tds_level'], $_GET['ph_level']);
+} else {
+    echo "Temperature, Humidity, TDS Level, and pH Level values are required.";
+}
+
